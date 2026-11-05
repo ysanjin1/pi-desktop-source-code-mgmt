@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "local.source-code-mgmt",
   "name": "代码管理",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "工作面板里的代码管理：①②③④⑤ 全部五块（环境检查与一键安装、SSH 密钥与连接、代码管理含同步与建库、克隆仓库、npm 发布向导），另加「总览」页与 GitRepo / GitIndex 两个 agent 工具。移植自 DSH 插件 source-code-mgmt（MIT，出处与声明见 THIRD-PARTY-NOTICES.md）；本移植版与上游作者无从属关系。",
   "i18n": {
     "en": {
@@ -12,7 +12,7 @@
     },
     "zh-CN": {
       "name": "代码管理",
-      "description": "工作面板里的代码管理：② SSH 密钥与连接（ed25519 生成、~/.ssh/config 就地改写、22/443 端口可选、GitHub/Gitee 切换、连接实测）与 ④ 克隆仓库（列出 gh / Gitee 账号下的仓库、标记本地已有、克隆到任意目录）。每个平台的端口与密钥各自独立。移植自 DSH 插件 source-code-mgmt 的 ②④ 两块。",
+      "description": "工作面板里的代码管理：①②③④⑤ 全部五块（环境检查与一键安装、SSH 密钥与连接、代码管理含暂存提交/同步/建库、克隆仓库、npm 发布向导），另加「总览」页（汇总本机仓库、标出同一远程的多个副本）与 GitRepo / GitIndex 两个 agent 工具。移植自 DSH 插件 source-code-mgmt（MIT；出处与声明见 THIRD-PARTY-NOTICES.md）；本移植版与上游作者无从属关系。",
       "safetyNotes": "git / ssh / ssh-keygen / gh 一律按绝对路径以参数数组方式起子进程（不拼 shell 字符串、不经 shell）。它写入插件自己的数据目录以外唯一的文件是 ~/.ssh/config，且只在你按写入按钮时发生：目标 Host 块就地改写（不产生重复块、不动其它块、保留文件自身换行符），改写前先把原文件备份在同目录，结果 chmod 0600。除非你显式选了别的密钥，否则该块原有的 IdentityFile 原样保留 —— 两个平台不会互相借钥匙。SSH 密钥只在 ~/.ssh 内生成，绝不离机。Gitee 用你粘贴的私人访问令牌，0600 存在插件数据目录，只发往 gitee.com，无其它网络访问。克隆用一个校验过的地址执行 git clone 到你选的目录，已存在同名路径时直接拒绝。"
     }
   },
