@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      停靠在宿主工作面板里（contributes.views）。嵌入视图没有窗口控制胶囊，
+      --pi-plugin-titlebar-height 由宿主发布为 0px —— 读变量，不写死 46px。
+    -->
+    <meta name="pi-plugin-chrome" content="v3" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; font-src 'self' file:; connect-src 'none';"
+    />
+    <title>代码管理</title>
+    <link rel="stylesheet" href="scm.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="bar">
+        <div class="bar-title">代码管理</div>
+        <div class="seg" id="providers" role="tablist" aria-label="代码托管平台">
+          <button type="button" role="tab" data-provider="github" aria-selected="true">GitHub</button>
+          <button type="button" role="tab" data-provider="gitee" aria-selected="false">Gitee</button>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="代码管理分区">
+        <button type="button" role="tab" data-pane="env" aria-selected="true">① 环境</button>
+        <button type="button" role="tab" data-pane="ssh" aria-selected="false">② SSH</button>
+        <button type="button" role="tab" data-pane="repo" aria-selected="false">③ 代码</button>
+        <button type="button" role="tab" data-pane="clone" aria-selected="false">④ 克隆</button>
+        <button type="button" role="tab" data-pane="npm" aria-selected="false">⑤ npm</button>
+        <button type="button" role="tab" data-pane="all" aria-selected="false">总览</button>
+      </nav>
+
+      <div class="banner" id="banner" hidden></div>
+
+      <main class="body">
+        <!-- ① 环境检查 -->
+        <section class="pane" id="pane-env" role="tabpanel">
+          <p class="hint">
+            插件进程拿不到宿主的环境变量，所以工具按「已知安装位置 → Windows 注册表 → PATH → 裸命令名」解析。
+            下面显示的是<b>实际解析结果</b>，找不到就写找不到；缺失的可以直接在这里装（会弹 UAC 提权）。
+          </p>
+          <div class="row">
+            <span class="muted">gh 下载源</span>
+            <select id="ghMirror" class="select"></select>
+          </div>
+          <ul class="bins" id="envBins"></ul>
+          <div class="row">
+            <button type="button" class="btn" id="envRefresh">重新检查</button>
+            <span class="muted" id="envMeta"></span>
+          </div>
+          <p class="note" id="envNote"></p>
+          <p class="note" id="toolProgress"></p>
+        </section>
+
+        <!-- ② SSH 密钥与连接 -->
+        <section class="pane" id="pane-ssh" role="tabpanel" hidden>
+          <div class="card">
+            <div class="card-row">
+              <span class="label">本站密钥</span>
+              <span class="value" id="keySummary">—</span>
+            </div>
+            <div class="row">
+              <select id="keySelect" class="select" aria-label="该平台使用哪把密钥"></select>
+              <button type="button" class="btn" id="btnGenKey">生成 ed25519 密钥</button>
+              <button type="button" class="btn" id="btnCopyPub">复制公钥</button>
+            </div>
+            <textarea id="pubkey" class="pubkey" readonly rows="3" spellcheck="false" placeholder="还没有公钥"></textarea>
+            <p class="hint">默认「沿用配置里那把」：两个平台常常用不同密钥，所以改一个平台时不会把另一个平台的钥匙带过来。</p>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">端口</span>
+              <select id="portSelect" class="select">
+                <option value="443">443（穿透封锁 22 的网络）</option>
+                <option value="22">22（标准端点）</option>
+              </select>
+            </div>
+            <p class="hint">
+              选 443 时 GitHub 写 <code>ssh.github.com:443</code>，选 22 时写标准 <code>github.com:22</code>。
+              与"有没有开代理"无关：OpenSSH 不读 <code>HTTP_PROXY</code>，该不该用 443 取决于你的网络是否封 22。
+              这里的初始值取自该平台**现有配置**，没配置过才默认 443。
+            </p>
+            <div class="row">
+              <button type="button" class="btn primary" id="btnWriteConfig">写入 SSH 配置</button>
+              <button type="button" class="btn" id="btnSshTest">测试连接</button>
+            </div>
+            <p class="note" id="sshWriteResult"></p>
+            <p class="note" id="sshTestResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">配置状态</span>
+            </div>
+            <ul class="blocks" id="sshBlocks"></ul>
+            <p class="hint" id="sshConfigPath"></p>
+          </div>
+        </section>
+
+        <!-- ④ 克隆仓库 -->
+        <section class="pane" id="pane-clone" role="tabpanel" hidden>
+          <div class="card">
+            <div class="card-row">
+              <span class="label">目标父目录</span>
+            </div>
+            <div class="row">
+              <input type="text" id="cloneParent" class="input" spellcheck="false" placeholder="绝对路径，例如 D:\\code" />
+              <button type="button" class="btn" id="btnPickDir">选择目录…</button>
+            </div>
+            <p class="note" id="cloneParentNote"></p>
+          </div>
+
+          <div class="card" id="tokenCard" hidden>
+            <div class="card-row">
+              <span class="label">Gitee 令牌</span>
+              <span class="value" id="giteeWho">未配置</span>
+            </div>
+            <div class="row">
+              <input type="password" id="giteeToken" class="input" spellcheck="false" placeholder="私人访问令牌（需 projects 权限）" />
+              <button type="button" class="btn" id="btnSaveToken">保存</button>
+              <button type="button" class="btn" id="btnClearToken">清除</button>
+            </div>
+            <p class="hint">令牌 0600 存在插件数据目录，只发往 gitee.com；不写进插件目录，也不回传到面板之外的任何地方。</p>
+          </div>
+
+          <div class="card">
+            <div class="row">
+              <button type="button" class="btn primary" id="btnListRepos">列出我账号下的仓库</button>
+              <span class="muted" id="repoNote"></span>
+            </div>
+            <ul class="repos" id="repoList"></ul>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">按地址克隆</span>
+            </div>
+            <div class="row">
+              <input type="text" id="cloneUrl" class="input" spellcheck="false" placeholder="https://… 或 git@github.com:owner/repo.git" />
+              <button type="button" class="btn" id="btnCloneUrl">克隆</button>
+            </div>
+            <p class="note" id="cloneProgress"></p>
+          </div>
+        </section>
+
+        <!-- ③ 代码管理 -->
+        <section class="pane" id="pane-repo" role="tabpanel" hidden>
+          <div class="card">
+            <div class="card-row"><span class="label">仓库目录</span></div>
+            <div class="row">
+              <select id="repoPick" class="select" aria-label="已登记目录"></select>
+              <button type="button" class="btn" id="btnRepoPick">选择目录…</button>
+              <button type="button" class="btn" id="btnRepoScan">扫描本地仓库</button>
+              <button type="button" class="btn" id="btnRepoRefresh">读取状态</button>
+            </div>
+            <input type="text" id="repoDir" class="input" spellcheck="false" placeholder="或直接粘贴绝对路径" />
+            <p class="note" id="repoScanNote"></p>
+            <p class="note" id="repoNote"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="label">状态</span><span class="value" id="repoSummary">—</span></div>
+            <div class="row">
+              <select id="branchSelect" class="select" aria-label="分支"></select>
+              <button type="button" class="btn" id="btnCheckout">切换分支</button>
+            </div>
+            <div class="row">
+              <button type="button" class="btn" id="btnPush">推送</button>
+              <button type="button" class="btn" id="btnPull">拉取</button>
+              <button type="button" class="btn" id="btnMergePush">合并推送</button>
+              <button type="button" class="btn" id="btnPushStaged">推送暂存</button>
+            </div>
+            <div class="row">
+              <button type="button" class="btn" id="btnForcePush">强制推送</button>
+              <button type="button" class="btn" id="btnForcePull">强制拉取</button>
+              <button type="button" class="btn" id="btnAlign">对齐远程</button>
+            </div>
+            <p class="note" id="syncResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">改动</span>
+              <button type="button" class="btn small" id="btnStageAll">全部暂存</button>
+              <button type="button" class="btn small" id="btnUnstageAll">全部取消暂存</button>
+            </div>
+            <ul class="repos" id="repoFiles"></ul>
+            <textarea id="repoDiff" class="pubkey" readonly rows="6" spellcheck="false" placeholder="点某个文件的「查看」看差异"></textarea>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="label">提交</span></div>
+            <input type="text" id="commitMessage" class="input" spellcheck="false" placeholder="提交信息（必填）" />
+            <div class="row">
+              <button type="button" class="btn primary" id="btnCommit">提交已暂存</button>
+            </div>
+            <p class="note" id="commitResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">大文件</span>
+              <span class="value muted" id="repoBigHint">超过 100MB 的文件会被平台拒绝推送</span>
+            </div>
+            <ul class="repos" id="repoBig"></ul>
+            <div class="row">
+              <button type="button" class="btn" id="btnIgnoreBig">加入 .gitignore</button>
+            </div>
+            <p class="note" id="repoIgnoreResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="label">建库</span></div>
+            <div class="row">
+              <button type="button" class="btn" id="btnInitGit">仅 git init</button>
+              <select id="repoVisibility" class="select">
+                <option value="private">私有</option>
+                <option value="public">公开</option>
+              </select>
+              <button type="button" class="btn primary" id="btnCreateRepo">新建远程仓库并推送</button>
+              <button type="button" class="btn" id="btnSetVisibility">改可见性</button>
+            </div>
+            <p class="note" id="createResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row">
+              <span class="label">最近提交</span>
+              <button type="button" class="btn small" id="btnRepoLog">刷新</button>
+            </div>
+            <ul class="repos" id="repoLog"></ul>
+            <p class="hint">revert / cherry-pick / 强制推拉 / 对齐都会先弹确认；有冲突时保持原状、不自动继续。</p>
+          </div>
+        </section>
+
+        <!-- ⑤ npm 发布向导 -->
+        <section class="pane" id="pane-npm" role="tabpanel" hidden>
+          <div class="card">
+            <div class="card-row"><span class="label">包目录</span></div>
+            <div class="row">
+              <input type="text" id="npmDir" class="input" spellcheck="false" placeholder="含 package.json 的目录（绝对路径）" />
+              <button type="button" class="btn" id="btnNpmPick">选择目录…</button>
+              <button type="button" class="btn" id="btnNpmCheck">重新检查</button>
+            </div>
+            <p class="note" id="npmNote"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="label">状态</span><span class="value" id="npmSummary">—</span></div>
+            <p class="hint">
+              登录与发布固定走官方源 <code>registry.npmjs.org</code>（镜像只同步、不接受发布）；
+              即使全局配了镜像，这里也会带 <code>--registry</code>。
+            </p>
+            <div class="row">
+              <button type="button" class="btn" id="btnNpmLogin">打开终端登录</button>
+              <button type="button" class="btn" id="btnNpmPack">预览打包</button>
+            </div>
+            <p class="note" id="npmPackResult"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-row"><span class="label">发布</span></div>
+            <label class="row" style="gap: 6px">
+              <input type="checkbox" id="npmConfirm" />
+              <span class="muted">我已核对上面的包名 / 版本 / 文件清单，确认发布到 npm registry</span>
+            </label>
+            <div class="row">
+              <button type="button" class="btn primary" id="btnNpmPublish" disabled>发布</button>
+            </div>
+            <p class="note" id="npmPublishResult"></p>
+          </div>
+        </section>
+
+        <!-- 总览：把散落各处的本地仓库汇总成一张表 -->
+        <section class="pane" id="pane-all" role="tabpanel" hidden>
+          <div class="card">
+            <div class="row">
+              <button type="button" class="btn primary" id="btnIndexScan">扫描全部本地仓库</button>
+              <span class="muted" id="indexNote"></span>
+            </div>
+            <p class="hint">
+              扫描根：当前项目 / 克隆目录 / 已登记目录 / 常见代码目录 / 盘根 / <b>各 agent 登记的工作区</b>（DSH 的
+              <code>~/.dsh/storages/workspace.json</code>）；普通目录与盘根都下探 2 层，系统目录与
+              <code>node_modules</code> 跳过。每个仓库读分支、远程、改动数、领先落后、最后提交。
+              <b>同一个远程出现多份本地副本会被标出来</b> —— 那通常就是不同 agent 各拉了一份。
+            </p>
+            <div class="row">
+              <input type="text" id="scanRootInput" class="input" spellcheck="false" placeholder="额外扫描根（绝对路径，只多不少）" />
+              <button type="button" class="btn" id="btnAddRoot">加为扫描根</button>
+            </div>
+            <ul class="repos" id="scanRoots"></ul>
+          </div>
+          <div class="card">
+            <div class="card-row"><span class="label">仓库</span><span class="value" id="indexSummary">—</span></div>
+            <ul class="repos" id="indexList"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="scm.js"></script>
+  </body>
+</html>

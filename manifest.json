@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "local.source-code-mgmt",
+  "name": "代码管理",
+  "version": "0.9.1",
+  "description": "工作面板里的代码管理：①②③④⑤ 全部五块（环境检查与一键安装、SSH 密钥与连接、代码管理含同步与建库、克隆仓库、npm 发布向导），另加「总览」页与 GitRepo / GitIndex 两个 agent 工具。移植自 DSH 插件 source-code-mgmt（MIT，出处与声明见 THIRD-PARTY-NOTICES.md）；本移植版与上游作者无从属关系。",
+  "i18n": {
+    "en": {
+      "name": "Source Code Mgmt",
+      "description": "Source control in the work panel: all five sections (environment check with one-click installs, SSH keys and connection, repo management with sync and repo creation, cloning, npm publish wizard), plus an index page and the GitRepo / GitIndex agent tools. A port of the DSH plugin source-code-mgmt (MIT; see THIRD-PARTY-NOTICES.md). This port is not affiliated with the upstream author.",
+      "safetyNotes": "Runs git / ssh / ssh-keygen / gh as absolute-path child processes with argument arrays (never a shell string, never a shell). The only file outside this plugin's own data directory it writes is ~/.ssh/config, and only when you press the write button: the target Host block is rewritten in place (no duplicate blocks, other blocks and the file's own line endings preserved), the previous file is backed up next to it first, and the result is chmod 0600. A block's existing IdentityFile is kept verbatim unless you explicitly pick another key, so the two platforms never borrow each other's key. SSH keys are only created inside ~/.ssh and never leave the machine. Gitee access uses a personal access token you paste in, stored 0600 in the plugin data directory and sent only to gitee.com; no other network access. Cloning runs git clone with a validated URL into a directory you pick, and refuses to overwrite an existing path."
+    },
+    "zh-CN": {
+      "name": "代码管理",
+      "description": "工作面板里的代码管理：② SSH 密钥与连接（ed25519 生成、~/.ssh/config 就地改写、22/443 端口可选、GitHub/Gitee 切换、连接实测）与 ④ 克隆仓库（列出 gh / Gitee 账号下的仓库、标记本地已有、克隆到任意目录）。每个平台的端口与密钥各自独立。移植自 DSH 插件 source-code-mgmt 的 ②④ 两块。",
+      "safetyNotes": "git / ssh / ssh-keygen / gh 一律按绝对路径以参数数组方式起子进程（不拼 shell 字符串、不经 shell）。它写入插件自己的数据目录以外唯一的文件是 ~/.ssh/config，且只在你按写入按钮时发生：目标 Host 块就地改写（不产生重复块、不动其它块、保留文件自身换行符），改写前先把原文件备份在同目录，结果 chmod 0600。除非你显式选了别的密钥，否则该块原有的 IdentityFile 原样保留 —— 两个平台不会互相借钥匙。SSH 密钥只在 ~/.ssh 内生成，绝不离机。Gitee 用你粘贴的私人访问令牌，0600 存在插件数据目录，只发往 gitee.com，无其它网络访问。克隆用一个校验过的地址执行 git clone 到你选的目录，已存在同名路径时直接拒绝。"
+    }
+  },
+  "author": "local",
+  "categories": ["developer-tools"],
+  "main": "main.js",
+  "contributes": {
+    "views": [
+      {
+        "id": "scm",
+        "title": { "en": "Source Code Mgmt", "zh-CN": "代码管理" },
+        "icon": "branch",
+        "entry": "views/index.html",
+        "order": 25
+      }
+    ],
+    "agentTools": [
+      {
+        "name": "GitRepo",
+        "description": "读/操作一个本地 git 仓库：status / diff / log / branches / bigFiles，以及 stage / unstage / commit / checkout / push / pull / mergePush / pushStaged / init / createRepo / setVisibility / revert / cherryPick / ignoreBig；align / forcePush / forcePull 需要 confirm 且应先问用户。",
+        "risk": "medium"
+      },
+      {
+        "name": "GitIndex",
+        "description": "汇总本机 git 仓库（含同一远程的多个副本）并把远程仓库克隆到指定目录。",
+        "risk": "medium"
+      }
+    ]
+  },
+  "permissions": ["ui.view", "fs.read", "agent.tool.register"],
+  "fs": { "read": { "root": "userSelected" } },
+  "engines": { "piDesktop": ">=0.9.0" },
+  "activationEvents": ["onStartup"]
+}
