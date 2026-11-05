@@ -27,7 +27,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 const HOME = os.homedir();
 const SSH_DIR = path.join(HOME, ".ssh");
 const SSH_CONFIG = path.join(SSH_DIR, "config");
